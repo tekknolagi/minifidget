@@ -132,15 +132,28 @@ impl Trace {
         // Write header
         let maxval = 255;
         file.write(format!("P5\n{width} {height}\n{maxval}\n").as_bytes())?;
+        let mut data = vec![0; width*height];
+        let fwidth = width as f64;
+        let fheight = height as f64;
+        let minx = -1.0;
+        let maxx = 1.0;
+        let miny = -1.0;
+        let maxy = 1.0;
         for row in 0..height {
+            let frow = row as f64;
             for col in 0..width {
-                let x = row as f64 / width as f64;
-                let y = col as f64 / height as f64;
-                let val = self.eval(x, y, 0.0);
-                let brightness = (val.clamp(0.0, 1.0) * (maxval as f64)).round() as u8;
-                file.write(&[brightness])?;
+                let fcol = col as f64;
+                let x: f64 = minx + (maxx - minx) * fcol / fwidth;
+                let y: f64 = miny + (maxy - miny) * frow / fheight;
+                assert!(x >= -1.0);
+                assert!(x <= 1.0);
+                assert!(y >= -1.0);
+                assert!(y <= 1.0);
+                let val = self.eval(x, -y, 0.0);
+                data[row*width + col] = if val < 0.0 { maxval } else { 0 };
             }
         }
+        file.write_all(&data)?;
         file.flush()?;
         Ok(())
     }
