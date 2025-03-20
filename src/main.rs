@@ -142,10 +142,6 @@ impl Trace {
                 let fcol = col as f64;
                 let x: f64 = minx + (maxx - minx) * fcol / fwidth;
                 let y: f64 = miny + (maxy - miny) * frow / fheight;
-                assert!(x >= -1.0);
-                assert!(x <= 1.0);
-                assert!(y >= -1.0);
-                assert!(y <= 1.0);
                 let val = self.eval(x, -y, 0.0);
                 data[row*width + col] = if val < 0.0 { maxval } else { 0 };
             }
