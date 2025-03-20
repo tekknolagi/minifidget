@@ -5,44 +5,19 @@ use std::collections::HashMap;
 struct InsnId(usize);
 
 #[derive(Debug)]
-enum Opcode {
+enum Insn {
     Const(f64),
     VarX,
     VarY,
     VarZ,
-    Mul,
-    Add,
-    Sub,
-    Max,
-    Min,
-    Neg,
-    Square,
-    Sqrt,
-}
-
-impl Opcode {
-    fn from_str(name: &str) -> Option<Self> {
-        Some(match name {
-            "var-x" => Opcode::VarX,
-            "var-y" => Opcode::VarY,
-            "var-z" => Opcode::VarZ,
-            "add" => Opcode::Add,
-            "sub" => Opcode::Sub,
-            "mul" => Opcode::Mul,
-            "neg" => Opcode::Neg,
-            "max" => Opcode::Max,
-            "min" => Opcode::Min,
-            "square" => Opcode::Square,
-            "sqrt" => Opcode::Sqrt,
-            _ => return None,
-        })
-    }
-}
-
-#[derive(Debug)]
-struct Insn {
-    opcode: Opcode,
-    operands: Vec<InsnId>,
+    Mul(InsnId, InsnId),
+    Add(InsnId, InsnId),
+    Sub(InsnId, InsnId),
+    Max(InsnId, InsnId),
+    Min(InsnId, InsnId),
+    Neg(InsnId),
+    Square(InsnId),
+    Sqrt(InsnId),
 }
 
 #[derive(Debug)]
@@ -75,27 +50,49 @@ impl Trace {
             let insn = match words.next() {
                 Some("const") => {
                     let float = words.next().ok_or("no float")?.parse::<f64>()?;
-                    Insn { opcode: Opcode::Const(float), operands: vec![] }
+                    Insn::Const(float)
                 }
-                Some(word) => {
-                    let opcode = Opcode::from_str(word).ok_or(format!("unknown opcode {word}"))?;
-                    match opcode {
-                        Opcode::Add | Opcode::Sub | Opcode::Mul | Opcode::Max | Opcode::Min => {
-                            let left = vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                            let right = vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                            Insn { opcode, operands: vec![*left, *right] }
-                        }
-                        Opcode::Neg | Opcode::Square | Opcode::Sqrt => {
-                            let val = vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
-                            Insn { opcode, operands: vec![*val] }
-                        }
-                        Opcode::VarX | Opcode::VarY | Opcode::VarZ => {
-                            Insn { opcode, operands: vec![] }
-                        }
-                        _ => todo!("{opcode:?}"),
-                    }
+                Some("var-x") => Insn::VarX,
+                Some("var-y") => Insn::VarY,
+                Some("var-z") => Insn::VarZ,
+                Some("add") => {
+                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
+                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
+                    Insn::Add(left, right)
                 }
-                None => break,
+                Some("sub") => {
+                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
+                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
+                    Insn::Sub(left, right)
+                }
+                Some("mul") => {
+                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
+                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
+                    Insn::Mul(left, right)
+                }
+                Some("min") => {
+                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
+                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
+                    Insn::Min(left, right)
+                }
+                Some("max") => {
+                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
+                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
+                    Insn::Max(left, right)
+                }
+                Some("neg") => {
+                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
+                    Insn::Neg(val)
+                }
+                Some("square") => {
+                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
+                    Insn::Square(val)
+                }
+                Some("sqrt") => {
+                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
+                    Insn::Sqrt(val)
+                }
+                word => todo!("{word:?}"),
             };
             let insn_id = result.push_insn(insn);
             vars.insert(dst.into(), insn_id);
@@ -107,19 +104,19 @@ impl Trace {
         assert!(!self.insns.is_empty(), "Must have some value to return");
         let mut values = vec![0.0; self.insns.len()];
         for (idx, insn) in self.insns.iter().enumerate() {
-            let value = match insn.opcode {
-                Opcode::Const(v) => v,
-                Opcode::VarX => x,
-                Opcode::VarY => y,
-                Opcode::VarZ => z,
-                Opcode::Neg => -values[insn.operands[0].0],
-                Opcode::Square => values[insn.operands[0].0] * values[insn.operands[0].0],
-                Opcode::Sqrt => values[insn.operands[0].0].sqrt(),
-                Opcode::Mul => values[insn.operands[0].0] * values[insn.operands[1].0],
-                Opcode::Add => values[insn.operands[0].0] + values[insn.operands[1].0],
-                Opcode::Sub => values[insn.operands[0].0] - values[insn.operands[1].0],
-                Opcode::Max => values[insn.operands[0].0].max(values[insn.operands[1].0]),
-                Opcode::Min => values[insn.operands[0].0].min(values[insn.operands[1].0]),
+            let value = match *insn {
+                Insn::Const(v) => v,
+                Insn::VarX => x,
+                Insn::VarY => y,
+                Insn::VarZ => z,
+                Insn::Neg(val) => -values[val.0],
+                Insn::Square(val) => values[val.0] * values[val.0],
+                Insn::Sqrt(val) => values[val.0].sqrt(),
+                Insn::Mul(left, right) => values[left.0] * values[right.0],
+                Insn::Add(left, right) => values[left.0] + values[right.0],
+                Insn::Sub(left, right) => values[left.0] - values[right.0],
+                Insn::Max(left, right) => values[left.0].max(values[right.0]),
+                Insn::Min(left, right) => values[left.0].min(values[right.0]),
             };
             values[idx] = value;
         }
