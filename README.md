@@ -1,6 +1,7 @@
 # minifidget
 
-A (very) small version of Matt Keeter's [fidget][fidget].
+A (very) small version of Matt Keeter's [fidget][fidget]. See all of the code
+in [src/main.rs](src/main.rs).
 
 [fidget]: https://github.com/mkeeter/fidget
 
