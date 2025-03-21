@@ -1,10 +1,12 @@
 use std::io::{BufRead, Write};
 use std::collections::HashMap;
+use dynasmrt::dynasm;
+use dynasmrt::DynasmApi;
 
 #[derive(Clone, Copy, Debug)]
 struct InsnId(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Insn {
     Const(f64),
     VarX,
@@ -24,6 +26,8 @@ enum Insn {
 struct Trace {
     insns: Vec<Insn>,
 }
+
+type Compiled = extern "C" fn(values: *mut f64, x: f64, y: f64, z: f64) -> f64;
 
 impl Trace {
     fn new() -> Self {
@@ -123,6 +127,100 @@ impl Trace {
         *values.last().unwrap()
     }
 
+    fn compile(&self) -> (dynasmrt::ExecutableBuffer, Compiled) {
+        assert!(!self.insns.is_empty(), "Must have some value to return");
+        let mut ops = dynasmrt::x64::Assembler::new().unwrap();
+        let begin = ops.offset();
+        for (idx, insn) in self.insns.iter().enumerate() {
+            match *insn {
+                Insn::Const(v) =>
+                    dynasm!(ops
+                        ; movabs rax, v.to_bits() as i64
+                        ; mov QWORD [rdi + (idx as i32) * 8], rax
+                    ),
+                Insn::VarX =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::VarY =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd [rdi + (idx as i32) * 8], xmm1
+                    ),
+                Insn::VarZ =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd [rdi + (idx as i32) * 8], xmm2
+                    ),
+                Insn::Mul(left, right) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (left.0 as i32) * 8]
+                        ; mulsd xmm0, [rdi + (right.0 as i32) * 8]
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Add(left, right) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (left.0 as i32) * 8]
+                        ; addsd xmm0, [rdi + (right.0 as i32) * 8]
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Sub(left, right) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (left.0 as i32) * 8]
+                        ; subsd xmm0, [rdi + (right.0 as i32) * 8]
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Max(left, right) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (left.0 as i32) * 8]
+                        ; maxsd xmm0, [rdi + (right.0 as i32) * 8]
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Min(left, right) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (left.0 as i32) * 8]
+                        ; minsd xmm0, [rdi + (right.0 as i32) * 8]
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Neg(val) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movabs rax, -9223372036854775808
+                        ; xor rax, [rdi + (val.0 as i32) * 8]
+                        ; mov QWORD [rdi + (idx as i32) * 8], rax
+                    ),
+                Insn::Square(val) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (val.0 as i32) * 8]
+                        ; mulsd xmm0, xmm0
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+                Insn::Sqrt(val) =>
+                    dynasm!(ops
+                        ; .arch x64
+                        ; movsd xmm0, [rdi + (val.0 as i32) * 8]
+                        ; sqrtsd xmm0, xmm0
+                        ; movsd [rdi + (idx as i32) * 8], xmm0
+                    ),
+            }
+        }
+        dynasm!(ops
+            ; .arch x64
+            ; movsd xmm0, [rdi + ((self.insns.len()-1) as i32) * 8]
+            ; ret
+        );
+        let buf = ops.finalize().unwrap();
+        let compiled: Compiled = unsafe { std::mem::transmute(buf.ptr(begin)) };
+        (buf, compiled)
+    }
+
     fn render_to(&self, filename: &str, height: usize, width: usize)
         -> Result<(), Box<dyn std::error::Error>> {
         let mut file = std::fs::File::create(filename)?;
@@ -150,10 +248,43 @@ impl Trace {
         file.flush()?;
         Ok(())
     }
+
+    fn compiled_render_to(&self, filename: &str, height: usize, width: usize, f: Compiled)
+        -> Result<(), Box<dyn std::error::Error>> {
+        let mut file = std::fs::File::create(filename)?;
+        // Write header
+        let maxval = 255;
+        file.write(format!("P5\n{width} {height}\n{maxval}\n").as_bytes())?;
+        let mut data = vec![0; width*height];
+        let fwidth = width as f64;
+        let fheight = height as f64;
+        let minx = -1.0;
+        let maxx = 1.0;
+        let miny = -1.0;
+        let maxy = 1.0;
+        for row in 0..height {
+            let frow = row as f64;
+            for col in 0..width {
+                let fcol = col as f64;
+                let x: f64 = minx + (maxx - minx) * fcol / fwidth;
+                let y: f64 = miny + (maxy - miny) * frow / fheight;
+                let mut values = vec![0.0; self.insns.len()];
+                let val = f(values.as_mut_ptr(), x, -y, 0.0);
+                data[row*width + col] = if val < 0.0 { maxval } else { 0 };
+            }
+        }
+        file.write_all(&data)?;
+        file.flush()?;
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trace = Trace::from_file("prospero.vm")?;
-    trace.render_to("prospero.ppm", /*height=*/600, /*width=*/600)?;
+    let (_buf, compiled) = trace.compile();
+    // let result = compiled(values.as_mut_ptr(), 0.0, 0.0, 0.0);
+    // eprintln!("result: {result}");
+    // trace.compiled_render_to("prospero.ppm", /*height=*/200, /*width=*/200, compiled)?;
+    trace.render_to("prospero.ppm", /*height=*/200, /*width=*/200)?;
     Ok(())
 }
