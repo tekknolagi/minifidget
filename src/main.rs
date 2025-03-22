@@ -10,6 +10,7 @@ enum Insn {
     VarX,
     VarY,
     VarZ,
+    Div(InsnId, InsnId),
     Mul(InsnId, InsnId),
     Add(InsnId, InsnId),
     Sub(InsnId, InsnId),
@@ -18,6 +19,8 @@ enum Insn {
     Neg(InsnId),
     Square(InsnId),
     Sqrt(InsnId),
+    Exp(InsnId),
+    Ln(InsnId),
 }
 
 #[derive(Debug)]
@@ -55,11 +58,14 @@ impl Trace {
                 ["add", left, right] => Insn::Add(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
                 ["sub", left, right] => Insn::Sub(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
                 ["mul", left, right] => Insn::Mul(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["div", left, right] => Insn::Div(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
                 ["min", left, right] => Insn::Min(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
                 ["max", left, right] => Insn::Max(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
                 ["neg", val] => Insn::Neg(*vars.get(val).ok_or("unbound variable")?),
                 ["square", val] => Insn::Square(*vars.get(val).ok_or("unbound variable")?),
                 ["sqrt", val] => Insn::Sqrt(*vars.get(val).ok_or("unbound variable")?),
+                ["exp", val] => Insn::Exp(*vars.get(val).ok_or("unbound variable")?),
+                ["ln", val] => Insn::Ln(*vars.get(val).ok_or("unbound variable")?),
                 _ => todo!("{:?}", words),
             };
             let insn_id = result.push_insn(insn);
@@ -80,9 +86,12 @@ impl Trace {
                 Insn::Neg(val) => -values[val.0],
                 Insn::Square(val) => values[val.0] * values[val.0],
                 Insn::Sqrt(val) => values[val.0].sqrt(),
+                Insn::Exp(val) => values[val.0].exp(),
+                Insn::Ln(val) => values[val.0].ln(),
                 Insn::Mul(left, right) => values[left.0] * values[right.0],
                 Insn::Add(left, right) => values[left.0] + values[right.0],
                 Insn::Sub(left, right) => values[left.0] - values[right.0],
+                Insn::Div(left, right) => values[left.0] / values[right.0],
                 Insn::Max(left, right) => values[left.0].max(values[right.0]),
                 Insn::Min(left, right) => values[left.0].min(values[right.0]),
             };
