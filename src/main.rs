@@ -132,16 +132,12 @@ impl Trace {
         let mut data = vec![0; width*height];
         let fwidth = width as f64;
         let fheight = height as f64;
-        let minx = -1.0;
-        let maxx = 1.0;
-        let miny = -1.0;
-        let maxy = 1.0;
         for row in 0..height {
             let frow = row as f64;
             for col in 0..width {
                 let fcol = col as f64;
-                let x: f64 = minx + (maxx - minx) * fcol / fwidth;
-                let y: f64 = miny + (maxy - miny) * frow / fheight;
+                let x: f64 = 2.0 * fcol / fwidth - 1.0;
+                let y: f64 = 2.0 * frow / fheight - 1.0;
                 let val = self.eval(x, -y, 0.0);
                 data[row*width + col] = if val < 0.0 { maxval } else { 0 };
             }
