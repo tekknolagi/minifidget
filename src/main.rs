@@ -47,52 +47,20 @@ impl Trace {
                 Some(name) => name,
                 None => break,
             };
-            let insn = match words.next() {
-                Some("const") => {
-                    let float = words.next().ok_or("no float")?.parse::<f64>()?;
-                    Insn::Const(float)
-                }
-                Some("var-x") => Insn::VarX,
-                Some("var-y") => Insn::VarY,
-                Some("var-z") => Insn::VarZ,
-                Some("add") => {
-                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                    Insn::Add(left, right)
-                }
-                Some("sub") => {
-                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                    Insn::Sub(left, right)
-                }
-                Some("mul") => {
-                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                    Insn::Mul(left, right)
-                }
-                Some("min") => {
-                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                    Insn::Min(left, right)
-                }
-                Some("max") => {
-                    let left = *vars.get(words.next().ok_or("no left")?).ok_or("unbound variable")?;
-                    let right = *vars.get(words.next().ok_or("no right")?).ok_or("unbound variable")?;
-                    Insn::Max(left, right)
-                }
-                Some("neg") => {
-                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
-                    Insn::Neg(val)
-                }
-                Some("square") => {
-                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
-                    Insn::Square(val)
-                }
-                Some("sqrt") => {
-                    let val = *vars.get(words.next().ok_or("no val")?).ok_or("unbound variable")?;
-                    Insn::Sqrt(val)
-                }
-                word => todo!("{word:?}"),
+            let insn = match words.clone().collect::<Vec<_>>()[..] {
+                ["const", val] => Insn::Const(val.parse::<f64>()?),
+                ["var-x"] => Insn::VarX,
+                ["var-y"] => Insn::VarY,
+                ["var-z"] => Insn::VarZ,
+                ["add", left, right] => Insn::Add(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["sub", left, right] => Insn::Sub(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["mul", left, right] => Insn::Mul(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["min", left, right] => Insn::Min(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["max", left, right] => Insn::Max(*vars.get(left).ok_or("unbound variable")?, *vars.get(right).ok_or("unbound variable")?),
+                ["neg", val] => Insn::Neg(*vars.get(val).ok_or("unbound variable")?),
+                ["square", val] => Insn::Square(*vars.get(val).ok_or("unbound variable")?),
+                ["sqrt", val] => Insn::Sqrt(*vars.get(val).ok_or("unbound variable")?),
+                _ => todo!("{:?}", words),
             };
             let insn_id = result.push_insn(insn);
             vars.insert(dst.into(), insn_id);
