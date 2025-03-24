@@ -1,17 +1,19 @@
 import numpy as np
 
+prog = []
+
 with open('prospero.vm') as f:
-    text = f.read().strip()
+    for line in f:
+        if line.startswith('#'):
+            continue
+        prog.append(line.split())
 
 side = 512
 space = np.linspace(-1, 1, side)
 (x, y) = np.meshgrid(space, space)
 v = {}
 
-for line in text.split('\n'):
-    if line.startswith('#'):
-        continue
-    [out, op, *args] = line.split()
+for (out, op, *args) in prog:
     match op:
         case "var-x": v[out] = x
         case "var-y": v[out] = -y
