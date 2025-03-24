@@ -12,8 +12,11 @@ with_gc = []
 seen = set()
 
 for (out, op, *args) in reversed(prog):
+    # Don't try to GC constants
+    # Also don't add GC to the beginning (end) of the program
     if op != "const" and with_gc:
         for arg in args:
+            # Delete variable at first (last) use
             if arg not in seen:
                 with_gc.append(("_", "gc", arg))
         seen.update(args)
