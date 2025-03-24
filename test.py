@@ -8,13 +8,27 @@ with open('prospero.vm') as f:
             continue
         prog.append(line.split())
 
-side = 512
+with_gc = []
+seen = set()
+
+for (out, op, *args) in reversed(prog):
+    if op != "const" and with_gc:
+        for arg in args:
+            if arg not in seen:
+                with_gc.append(("_", "gc", arg))
+        seen.update(args)
+    with_gc.append((out, op, *args))
+
+prog = with_gc[::-1]
+
+side = 1024
 space = np.linspace(-1, 1, side)
 (x, y) = np.meshgrid(space, space)
 v = {}
 
 for (out, op, *args) in prog:
     match op:
+        case "gc": del v[args[0]]
         case "var-x": v[out] = x
         case "var-y": v[out] = -y
         case "const": v[out] = float(args[0])
